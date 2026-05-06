@@ -1,12 +1,13 @@
 /**
  * API client for chatbot backend
  */
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
+import type { AxiosInstance } from 'axios';
 import type {
   ChatRequest,
   ChatResponse,
   Category,
-  SessionLimitResponse,
+  FAQ,  // ✅ Add this import
 } from '../types/chatbot';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -17,13 +18,12 @@ class ChatbotAPI {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      withCredentials: true, // Important for session cookies
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    // Add CSRF token to requests
     this.client.interceptors.request.use((config) => {
       const csrfToken = this.getCookie('csrftoken');
       if (csrfToken) {
@@ -42,9 +42,6 @@ class ChatbotAPI {
     return null;
   }
 
-  /**
-   * Send chat message
-   */
   async sendMessage(request: ChatRequest): Promise<ChatResponse> {
     const response = await this.client.post<ChatResponse>(
       '/api/chatbot/message/',
@@ -53,19 +50,17 @@ class ChatbotAPI {
     return response.data;
   }
 
-  /**
-   * Get FAQ categories
-   */
-  async getCategories(): Promise<{ categories: Category[]; faq_data: Record<string, any[]> }> {
+  // ✅ FIXED: Replace any[] with FAQ[]
+  async getCategories(): Promise<{ 
+    categories: Category[]; 
+    faq_data: Record<string, FAQ[]>;  // Changed from any[]
+  }> {
     const response = await this.client.get('/api/chatbot/message/', {
       params: { action: 'get_categories' },
     });
     return response.data;
   }
 
-  /**
-   * Check session limit
-   */
   async checkLimit(): Promise<{
     user_messages: number;
     max_messages: number;
@@ -77,17 +72,11 @@ class ChatbotAPI {
     return response.data;
   }
 
-  /**
-   * Reset chat session
-   */
   async resetChat(): Promise<{ message: string; user_message_count: number }> {
     const response = await this.client.post('/api/chatbot/reset/');
     return response.data;
   }
 
-  /**
-   * Submit feedback
-   */
   async submitFeedback(feedback: {
     helpful: boolean;
     tier: number;

@@ -17,10 +17,11 @@ export interface ChatMetadata {
   similarity?: number;
   sources?: Source[];
   can_retry?: boolean;
-  next_tier?: string;
+  next_tier?: string | null;  // ✅ Fixed
   timing?: Timing;
   cost?: Cost;
   tier_attempts?: TierAttempt[];
+  isLimitMessage?: boolean;
 }
 
 export interface Source {
@@ -85,7 +86,7 @@ export interface ChatResponse {
   confidence?: number;
   sources?: Source[];
   can_retry: boolean;
-  next_tier?: string | null;
+  next_tier?: string | null;  // ✅ Fixed
   tier_attempts?: TierAttempt[];
   timing: Timing;
   cost: Cost;

@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        'sage': {
+        sage: {
           50: '#f5f9f6',
           100: '#e8f4ea',
           200: '#d4e4d4',
