@@ -8,6 +8,63 @@ interface ChatMessageProps {
   showFeedback?: boolean;
 }
 
+// ============================================================
+// TIER BADGE — small colored pill showing which tier answered
+// ============================================================
+const TIER_CONFIG: Record<number, { label: string; icon: string; classes: string; defaultTooltip: string }> = {
+  1: {
+    label: 'FAQ',
+    icon: '✅',
+    classes: 'bg-green-50 text-green-700 border-green-200',
+    defaultTooltip: 'Answered from FAQ database',
+  },
+  2: {
+    label: 'RAG',
+    icon: '📚',
+    classes: 'bg-blue-50 text-blue-700 border-blue-200',
+    defaultTooltip: 'Answered from PDF documents (RAG)',
+  },
+  3: {
+    label: 'SQL',
+    icon: '🗄️',
+    classes: 'bg-purple-50 text-purple-700 border-purple-200',
+    defaultTooltip: 'Answered from chemical database (SQL)',
+  },
+  4: {
+    label: 'LLM',
+    icon: '🤖',
+    classes: 'bg-orange-50 text-orange-700 border-orange-200',
+    defaultTooltip: 'Answered by AI assistant (LLM)',
+  },
+};
+
+interface TierBadgeProps {
+  tier: number;
+  tierName?: string;
+}
+
+const TierBadge: React.FC<TierBadgeProps> = ({ tier, tierName }) => {
+  const config = TIER_CONFIG[tier];
+  if (!config) return null;
+
+  // Detect follow-up from tier_name (e.g. "Chemical Database (Follow-up)")
+  const isFollowup = !!tierName?.toLowerCase().includes('follow-up');
+
+  return (
+    <span
+      title={tierName || config.defaultTooltip}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-medium leading-none ${config.classes}`}
+    >
+      <span>{config.icon}</span>
+      <span>{config.label}</span>
+      {isFollowup && <span className="opacity-70">↩</span>}
+    </span>
+  );
+};
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   onFeedback,
@@ -21,6 +78,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
       setFeedbackGiven(true);
     }
   };
+
+  // Decide whether to render the tier badge
+  const shouldShowBadge =
+    !message.isUser &&
+    !!message.metadata &&
+    typeof message.metadata.tier === 'number' &&
+    message.metadata.tier !== 0 && // skip error/internal placeholder
+    message.metadata.tier_name !== 'Error';
 
   return (
     <div
@@ -55,13 +120,19 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           dangerouslySetInnerHTML={{ __html: parseMarkdown(message.content) }}
         />
 
-        {/* Timestamp */}
+        {/* Timestamp + Tier Badge */}
         <div
-          className={`text-[11px] text-gray-500 px-1 ${
-            message.isUser ? 'text-right' : 'text-left'
+          className={`flex items-center gap-2 text-[11px] text-gray-500 px-1 ${
+            message.isUser ? 'justify-end' : 'justify-start'
           }`}
         >
-          {formatTime(message.timestamp)}
+          <span>{formatTime(message.timestamp)}</span>
+          {shouldShowBadge && (
+            <TierBadge
+              tier={message.metadata!.tier as number}
+              tierName={message.metadata!.tier_name}
+            />
+          )}
         </div>
 
         {/* Feedback Buttons (Bot messages only) */}
