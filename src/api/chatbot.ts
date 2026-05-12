@@ -7,10 +7,30 @@ import type {
   ChatRequest,
   ChatResponse,
   Category,
-  FAQ,  // ✅ Add this import
+  FAQ,
 } from '../types/chatbot';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// ✅ Fixed: Remove import.meta completely
+const getApiBaseUrl = (): string => {
+  // If running as widget, get URL from script tag
+  if (typeof document !== 'undefined') {
+    const scriptTag = document.querySelector('script[src*="chatbot/widget.js"]');
+    if (scriptTag) {
+      const src = scriptTag.getAttribute('src') || '';
+      try {
+        const url = new URL(src, window.location.href);
+        return `${url.protocol}//${url.host}`;
+      } catch (e) {
+        console.warn('Failed to parse widget URL:', e);
+      }
+    }
+  }
+  
+  // Fallback to localhost
+  return 'http://localhost:8000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ChatbotAPI {
   private client: AxiosInstance;
@@ -50,10 +70,9 @@ class ChatbotAPI {
     return response.data;
   }
 
-  // ✅ FIXED: Replace any[] with FAQ[]
   async getCategories(): Promise<{ 
     categories: Category[]; 
-    faq_data: Record<string, FAQ[]>;  // Changed from any[]
+    faq_data: Record<string, FAQ[]>;
   }> {
     const response = await this.client.get('/api/chatbot/message/', {
       params: { action: 'get_categories' },

@@ -1,23 +1,27 @@
-// import { defineConfig } from 'vite'
-// import react from '@vitejs/plugin-react'
-
-// // https://vite.dev/config/
-// export default defineConfig({
-//   plugins: [react()],
-// })
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-    },
+  
+  // ✅ Define all replacements
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('production'),
+    'import.meta': JSON.stringify({}),
+    global: 'globalThis',
   },
+  
+  build: {
+    lib: {
+      entry: 'src/widget.tsx',
+      name: 'NormanChatbot',
+      fileName: 'norman-chatbot',
+      formats: ['iife']
+    },
+    rollupOptions: {
+      output: {
+        assetFileNames: 'norman-chatbot.[ext]',
+      }
+    },
+  }
 })
