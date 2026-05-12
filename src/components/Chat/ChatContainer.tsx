@@ -40,18 +40,21 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
   const [limitReached, setLimitReached] = useState(false);
-  
+
+  // ✅ NEW: maximize state
+  const [isMaximized, setIsMaximized] = useState(false);
+
   // Categories & FAQs
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [faqData, setFaqData] = useState<Record<string, FAQ[]>>({});
-  
+
   // Notification
   const [notification, setNotification] = useState<{
     message: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
-  
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -108,8 +111,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
   const handleResetChat = async () => {
     try {
       await chatbotAPI.resetChat();
-      
-      // Reset messages with welcome messages
+
       setMessages([
         {
           id: generateId(),
@@ -125,7 +127,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
           timestamp: new Date(),
         },
       ]);
-      
+
       setMessageCount(0);
       setLimitReached(false);
       showNotification('New chat started successfully!', 'success');
@@ -141,9 +143,9 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
 
   const handleSendMessage = async (messageText?: string, skipTier: number = 0, isFaqButton: boolean = false) => {
     const text = messageText || inputValue.trim();
-    
+
     if (!text || isProcessing) return;
-    
+
     if (text.length > 1000) {
       showNotification('Message too long (max 1000 characters)', 'error');
       return;
@@ -207,7 +209,6 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
     } catch (error: unknown) {
       setIsTyping(false);
 
-      // ✅ Properly type the error
       if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response?: { status?: number } };
         if (axiosError.response?.status === 429) {
@@ -248,7 +249,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
           .slice()
           .reverse()
           .find((m) => m.isUser);
-        
+
         if (lastUserMessage) {
           handleSendMessage(lastUserMessage.content, message.metadata.tier || 0, false);
         }
@@ -271,11 +272,15 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
     setSelectedCategory(null);
   };
 
+  // ✅ NEW: maximize toggle
+  const handleToggleMaximize = () => {
+    setIsMaximized((prev) => !prev);
+  };
+
   // ============================================================
   // EFFECTS
   // ============================================================
 
-  // ✅ Load categories and check limit on mount
   useEffect(() => {
     const init = async () => {
       await loadCategories();
@@ -291,6 +296,29 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
     }
   }, [messages, isTyping]);
 
+  // ✅ NEW: Lock host page scroll when maximized
+  useEffect(() => {
+    if (isMaximized && isOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isMaximized, isOpen]);
+
+  // ✅ NEW: ESC key exits maximized mode
+  useEffect(() => {
+    if (!isMaximized) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMaximized(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isMaximized]);
+
   // ============================================================
   // RENDER
   // ============================================================
@@ -299,40 +327,52 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
+  // ✅ NEW: dynamic container classes based on maximize state
+  const containerClasses = isMaximized
+    ? 'fixed inset-0 w-full h-full bg-white flex flex-col overflow-hidden z-[9999] animate-slide-up rounded-none border-none'
+    : `fixed bg-white flex flex-col overflow-hidden z-[9999] animate-slide-up
+       md:bottom-4 md:right-6 md:top-4 md:w-[420px] md:max-h-[calc(100vh-32px)] md:rounded-[20px] md:border-2 md:border-sage-200 md:shadow-[0_8px_24px_rgba(107,158,120,0.2)]
+       max-md:inset-0 max-md:w-full max-md:h-full max-md:rounded-none max-md:border-none`;
+
+  // ✅ NEW: center inner content with max-width when maximized (looks better on wide screens)
+  const innerWidthClass = isMaximized ? 'max-w-4xl mx-auto w-full' : '';
+
   return (
     <>
-      <div className={`
-        fixed bg-white flex flex-col overflow-hidden z-[9999] animate-slide-up
-        md:bottom-4 md:right-6 md:top-4 md:w-[420px] md:max-h-[calc(100vh-32px)] md:rounded-[20px] md:border-2 md:border-sage-200 md:shadow-[0_8px_24px_rgba(107,158,120,0.2)]
-        max-md:inset-0 max-md:w-full max-md:h-full max-md:rounded-none max-md:border-none
-      `}>
-        <ChatHeader onClose={onClose} />
+      <div className={containerClasses}>
+        <ChatHeader
+          onClose={onClose}
+          isMaximized={isMaximized}
+          onToggleMaximize={handleToggleMaximize}
+        />
 
         <div
           ref={messagesContainerRef}
-          className="flex-1 px-4 pb-0 overflow-y-auto flex flex-col gap-3 bg-gradient-to-b from-sage-50 to-white"
+          className="flex-1 overflow-y-auto bg-gradient-to-b from-sage-50 to-white"
         >
-          {messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              showFeedback={!message.isUser && !limitReached}
-              onFeedback={(helpful) => handleFeedback(message.id, helpful)}
-            />
-          ))}
+          <div className={`px-4 pb-0 flex flex-col gap-3 ${innerWidthClass}`}>
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                showFeedback={!message.isUser && !limitReached}
+                onFeedback={(helpful) => handleFeedback(message.id, helpful)}
+              />
+            ))}
 
-          <TypingIndicator isVisible={isTyping} tier={currentTier} />
-          <div ref={messagesEndRef} />
+            <TypingIndicator isVisible={isTyping} tier={currentTier} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
         {messageCount >= MAX_MESSAGES - 2 && messageCount < MAX_MESSAGES && !limitReached && (
-          <div className="mx-4 my-2 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-500 rounded text-xs text-yellow-800">
+          <div className={`${innerWidthClass} mx-4 my-2 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-500 rounded text-xs text-yellow-800`}>
             ⚠️ {MAX_MESSAGES - messageCount} messages remaining. Start a new chat soon.
           </div>
         )}
 
         {limitReached && (
-          <div className="mx-4 my-2">
+          <div className={`${innerWidthClass} mx-4 my-2`}>
             <button
               onClick={handleResetChat}
               className="w-full bg-gradient-to-r from-green-500 to-teal-500 text-white py-3 px-5 rounded-lg font-semibold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-2"
@@ -343,22 +383,24 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        <QuickActions
-          categories={categories}
-          selectedCategory={selectedCategory}
-          questions={currentQuestions}
-          onCategoryClick={handleCategoryClick}
-          onQuestionClick={handleQuestionClick}
-          onBack={handleBackToCategories}
-        />
+        <div className={innerWidthClass}>
+          <QuickActions
+            categories={categories}
+            selectedCategory={selectedCategory}
+            questions={currentQuestions}
+            onCategoryClick={handleCategoryClick}
+            onQuestionClick={handleQuestionClick}
+            onBack={handleBackToCategories}
+          />
 
-        <ChatInput
-          value={inputValue}
-          onChange={setInputValue}
-          onSend={() => handleSendMessage()}
-          disabled={isProcessing || limitReached}
-          placeholder={limitReached ? 'Session limit reached' : 'Ask me anything...'}
-        />
+          <ChatInput
+            value={inputValue}
+            onChange={setInputValue}
+            onSend={() => handleSendMessage()}
+            disabled={isProcessing || limitReached}
+            placeholder={limitReached ? 'Session limit reached' : 'Ask me anything...'}
+          />
+        </div>
       </div>
 
       {notification && (
