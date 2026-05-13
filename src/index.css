@@ -145,3 +145,93 @@ body {
 .scrollbar-track-transparent::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ──────────────────────────────────────────────────────────
+   Chat Button Animations
+   ────────────────────────────────────────────────────────── */
+
+/* Gentle floating idle motion */
+@keyframes chatButtonFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Expanding hexagon ripple - draws attention */
+@keyframes chatButtonPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* Twinkling sparkle - hints at AI capability */
+@keyframes chatButtonSparkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.5) rotate(180deg);
+    opacity: 0.3;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
+   Typing Indicator Animations
+   ────────────────────────────────────────────────────────── */
+
+/* Hex dot wave — lifts, scales, AND rotates 120° */
+/* The rotation creates a subtle spinning hexagon effect */
+@keyframes typingHexWave {
+  0%, 70%, 100% {
+    transform: translateY(0) scale(0.7) rotate(0deg);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-8px) scale(1.15) rotate(60deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-2px) scale(0.9) rotate(120deg);
+    opacity: 0.7;
+  }
+}
+
+/* Tier icon gentle breathing pulse */
+@keyframes typingIconPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+/* Shimmer gradient flowing across the text */
+@keyframes typingShimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+/* Animated trailing dots: . .. ... → loop */
+@keyframes typingDots {
+  0%   { clip-path: inset(0 100% 0 0); }
+  25%  { clip-path: inset(0 66% 0 0); }
+  50%  { clip-path: inset(0 33% 0 0); }
+  75%  { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(0 100% 0 0); }
+}
