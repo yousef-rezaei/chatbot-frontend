@@ -85,28 +85,78 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const showLimitReachedMessage = () => {
-    const limitMessage: ChatMessageType = {
-      id: generateId(),
-      content: `
-        <div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border-left: 4px solid #ff9800; padding: 20px; border-radius: 8px;">
-          <p style="font-size: 16px; font-weight: bold; margin: 0 0 12px 0; color: #e65100;">
-            🚫 Session Limit Reached
-          </p>
-          <p style="margin: 8px 0; font-size: 14px; color: #333;">
-            You've reached the maximum of <strong>10 questions</strong> per session.
-          </p>
-          <p style="margin: 8px 0; font-size: 13px; color: #666;">
-            Click the button below to start a new chat.
-          </p>
+const showLimitReachedMessage = () => {
+  const limitMessage: ChatMessageType = {
+    id: generateId(),
+    content: `
+      <div style="
+        position: relative;
+        overflow: hidden;
+        max-width: 460px;
+        border-radius: 16px;
+        border: 1px solid rgba(252, 211, 77, 0.5);
+        background: linear-gradient(135deg, #fffbeb 0%, #ffffff 55%, #fff7ed 100%);
+        padding: 18px 20px;
+        box-shadow: 0 4px 14px rgba(251, 191, 36, 0.12), 0 1px 3px rgba(0,0,0,0.04);
+      ">
+        <!-- Animated top accent bar -->
+        <div style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, #fbbf24 0%, #f97316 50%, #fbbf24 100%);
+          background-size: 200% 100%;
+          animation: limitShimmer 2.5s linear infinite;
+        "></div>
+
+        <!-- Header row -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+          <!-- Icon container with hourglass SVG -->
+          <div style="
+            flex-shrink: 0;
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #fef3c7, #fed7aa);
+            border: 1px solid #fde68a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: limitIconPulse 2.5s ease-in-out infinite;
+          ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 22h14"/>
+              <path d="M5 2h14"/>
+              <path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/>
+              <path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>
+            </svg>
+          </div>
+
+          <div style="min-width: 0;">
+            <h3 style="font-size: 14px; font-weight: 700; color: #78350f; margin: 0; line-height: 1.2; letter-spacing: -0.01em;">
+              Session Complete
+            </h3>
+            <p style="font-size: 11px; color: #b45309; margin: 3px 0 0; font-weight: 500; letter-spacing: 0.02em;">
+              <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; margin-right: 5px; vertical-align: middle;"></span>
+              10 of 10 questions used
+            </p>
+          </div>
         </div>
-      `,
-      isUser: false,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, limitMessage]);
-    setIsTyping(false);
+
+        <!-- Body text -->
+        <p style="font-size: 13px; color: #44403c; margin: 0; line-height: 1.55;">
+          You've completed your conversation with the Chatbot. Start a fresh chat below to continue exploring.
+        </p>
+      </div>
+    `,
+    isUser: false,
+    timestamp: new Date(),
   };
+  setMessages((prev) => [...prev, limitMessage]);
+  setIsTyping(false);
+};
 
   const handleResetChat = async () => {
     try {
@@ -347,10 +397,16 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
         />
 
         <div
-          ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto bg-gradient-to-b from-sage-50 to-white"
-        >
-          <div className={`px-4 pb-0 flex flex-col gap-3 ${innerWidthClass}`}>
+  ref={messagesContainerRef}
+  className="flex-1 overflow-y-auto relative"
+  style={{
+    backgroundImage: `
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52' viewBox='0 0 60 52'%3E%3Cpolygon points='30,4 52,16 52,40 30,52 8,40 8,16' fill='none' stroke='%236b9e78' stroke-width='0.6' opacity='0.13'/%3E%3Cpolygon points='30,16 42,22 42,34 30,40 18,34 18,22' fill='none' stroke='%236b9e78' stroke-width='0.4' opacity='0.08'/%3E%3C/svg%3E"),
+      linear-gradient(to bottom, rgb(244, 247, 242) 0%, rgb(252, 253, 251) 50%, white 100%)
+    `,
+  }}
+>
+          <div className={`px-4 pb-0 flex flex-col gap-3 mt-2${innerWidthClass}`}>
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -371,18 +427,67 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        {limitReached && (
-          <div className={`${innerWidthClass} mx-4 my-2`}>
-            <button
-              onClick={handleResetChat}
-              className="w-full bg-gradient-to-r from-green-500 to-teal-500 text-white py-3 px-5 rounded-lg font-semibold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <span>🔄</span>
-              <span>Start New Chat</span>
-            </button>
-          </div>
-        )}
+          {limitReached && (
+  <div className={`${innerWidthClass} mx-4 my-3`}>
+    <button
+      onClick={handleResetChat}
+      className="
+        group relative w-full overflow-hidden
+        bg-gradient-to-r from-sage-500 via-sage-400 to-sage-600
+        bg-[length:200%_100%]
+        text-white py-3.5 px-6 rounded-xl font-semibold text-[14px]
+        shadow-[0_8px_24px_rgba(107,158,120,0.4)]
+        transition-all duration-300 ease-out
+        hover:shadow-[0_14px_32px_rgba(107,158,120,0.55)]
+        hover:-translate-y-0.5
+        active:translate-y-0 active:scale-[0.98] active:duration-100
+        flex items-center justify-center gap-3
+      "
+      style={{ animation: 'newChatGradientFlow 4s ease-in-out infinite' }}
+    >
+      {/* Subtle inner highlight at top */}
+      <span
+        className="absolute inset-x-0 top-0 h-px pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)',
+        }}
+      />
 
+      {/* Refresh icon — rotates 180° on hover */}
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="relative z-10 transition-transform duration-500 ease-out group-hover:rotate-180"
+      >
+        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+        <path d="M16 16h5v5" />
+      </svg>
+
+      <span className="relative z-10 tracking-wide">Start New Chat</span>
+
+      {/* Sparkle — twinkles continuously */}
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="relative z-10 text-yellow-200 drop-shadow"
+        style={{ animation: 'newChatSparkle 2s ease-in-out infinite' }}
+      >
+        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" />
+      </svg>
+    </button>
+  </div>
+)}
         <div className={innerWidthClass}>
           <QuickActions
             categories={categories}

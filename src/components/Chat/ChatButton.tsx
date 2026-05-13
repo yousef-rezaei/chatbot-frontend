@@ -16,7 +16,7 @@ const ChatButton: React.FC<ChatButtonProps> = ({ onClick, isOpen }) => {
       {/* ─── Tooltip (slides in on hover) ───────────────────── */}
       <div className="absolute right-full mr-4 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none">
         <div className="relative bg-gray-900 text-white text-xs px-3 py-2 rounded-lg shadow-xl opacity-0 translate-x-3 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-out">
-          <span className="font-medium">💬 Ask the SLE Assistant</span>
+          <span className="font-medium">💬 Ask Me</span>
           {/* Tooltip arrow */}
           <span className="absolute left-full top-1/2 -translate-y-1/2 w-0 h-0 border-l-[6px] border-l-gray-900 border-y-[6px] border-y-transparent" />
         </div>
@@ -47,7 +47,7 @@ const ChatButton: React.FC<ChatButtonProps> = ({ onClick, isOpen }) => {
         {/* ─── Main Hexagon Button ──────────────────────── */}
         <button
           onClick={onClick}
-          aria-label="Open SLE Chatbot"
+          aria-label="Open  Chatbot"
           className="
             relative w-16 h-16
             bg-gradient-to-br from-sage-400 via-sage-500 to-sage-600
