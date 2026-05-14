@@ -1,27 +1,12 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
+// Normal app build (dev server + standalone preview).
+// Embed widget bundle: `npm run build:widget` (uses vite.widget.config.ts).
 export default defineConfig({
   plugins: [react()],
-  
-  // ✅ Define all replacements
-  define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
-    'import.meta': JSON.stringify({}),
-    global: 'globalThis',
+  server: {
+    port: 5173,
+    open: true,
   },
-  
-  build: {
-    lib: {
-      entry: 'src/widget.tsx',
-      name: 'NormanChatbot',
-      fileName: 'norman-chatbot',
-      formats: ['iife']
-    },
-    rollupOptions: {
-      output: {
-        assetFileNames: 'norman-chatbot.[ext]',
-      }
-    },
-  }
-})
+});

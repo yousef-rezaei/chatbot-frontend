@@ -1,4 +1,4 @@
-import React from 'react';
+import type { FC } from 'react';
 import type { Category, FAQ } from '../../types/chatbot';
 
 interface QuickActionsProps {
@@ -10,61 +10,61 @@ interface QuickActionsProps {
   onBack: () => void;
 }
 
-const QuickActions: React.FC<QuickActionsProps> = ({
+const QuickActions: FC<QuickActionsProps> = ({
   categories,
   selectedCategory,
   questions,
   onCategoryClick,
   onQuestionClick,
   onBack,
-}) => {
-  return (
-    <div className="sticky bottom-0 z-10 bg-gradient-to-t from-sage-100 to-transparent px-4 pt-3 pb-2 border-t border-sage-200/50 backdrop-blur-sm">
-      {/* Back Button */}
-      {selectedCategory && (
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-2 mb-2 bg-white border border-sage-300 rounded-lg text-xs font-semibold text-sage-600 cursor-pointer transition-all duration-200 hover:bg-sage-100 hover:border-sage-500 w-fit"
-        >
-          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-          </svg>
-          Back to Categories
-        </button>
-      )}
+}) => (
+  <div
+    className="flex-shrink-0 px-[18px] pt-2.5"
+    style={{ background: 'linear-gradient(to top, rgba(243,247,243,0.6) 0%, transparent 100%)' }}
+  >
+    {selectedCategory && (
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-1.5 mb-2 px-2.5 py-1.5 rounded-full bg-white border border-sage-200 text-[12px] font-medium text-ink-2 transition hover:bg-sage-50 hover:border-sage-300"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        All categories
+      </button>
+    )}
 
-      {/* Categories View */}
-      {!selectedCategory && (
-        <div className="flex gap-2 overflow-x-auto scroll-smooth py-0.5 scrollbar-thin scrollbar-thumb-sage-400 scrollbar-track-transparent">
-          {categories.map((category) => (
-            <button
-              key={category.name}
-              onClick={() => onCategoryClick(category.name)}
-              className="whitespace-nowrap flex-shrink-0 px-3.5 py-2 bg-white border border-sage-300 rounded-lg text-[13px] font-medium text-sage-700 cursor-pointer transition-all duration-200 shadow-[0_1px_3px_rgba(107,158,120,0.12)] hover:bg-sage-500 hover:border-sage-500 hover:text-white hover:-translate-y-0.5"
-            >
-              <span className="text-sm font-bold mr-1.5">{category.icon}</span>
-              {category.display_name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Questions View */}
-      {selectedCategory && (
-        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto py-0.5 scrollbar-thin scrollbar-thumb-sage-400 scrollbar-track-transparent">
-          {questions.map((faq, index) => (
-            <button
-              key={index}
-              onClick={() => onQuestionClick(faq.q)}
-              className="whitespace-normal text-left px-3 py-2 bg-white border border-sage-300 rounded-lg text-xs font-medium text-sage-700 cursor-pointer transition-all duration-200 shadow-[0_1px_3px_rgba(107,158,120,0.12)] hover:bg-sage-500 hover:border-sage-500 hover:text-white"
-            >
-              {faq.q}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+    {!selectedCategory ? (
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-0.5 px-0.5 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-sage-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+        {categories.map((c) => (
+          <button
+            key={c.name}
+            onClick={() => onCategoryClick(c.name)}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-full bg-white border border-sage-200 text-[12.5px] font-medium text-ink-2 transition hover:-translate-y-0.5 hover:bg-sage-500 hover:border-sage-500 hover:text-white"
+          >
+            <span className="text-[13px] leading-none">{c.icon}</span>
+            {c.display_name}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <div className="flex flex-col gap-1.5 max-h-[168px] overflow-y-auto pb-2 px-0.5">
+        {questions.length === 0 && (
+          <div className="text-[12.5px] text-ink-4 py-3">No quick questions in this category yet.</div>
+        )}
+        {questions.map((faq, i) => (
+          <button
+            key={i}
+            onClick={() => onQuestionClick(faq.q)}
+            className="text-left px-3 py-2 rounded-xl bg-white border border-sage-200 text-[13px] leading-snug text-ink-2 transition hover:translate-x-0.5 hover:bg-sage-50 hover:border-sage-400 hover:text-sage-800"
+          >
+            {faq.q}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+);
 
 export default QuickActions;

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, type FC } from 'react';
+import axios from 'axios';
 import ChatHeader from './ChatHeader';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
@@ -6,506 +7,418 @@ import QuickActions from './QuickActions';
 import TypingIndicator from './TypingIndicator';
 import Notification from '../common/Notification';
 import { chatbotAPI } from '../../api/chatbot';
-import type { ChatMessage as ChatMessageType, Category, FAQ } from '../../types/chatbot';
-import { generateId } from '../../utils/helpers';
+import type {
+  ChatMessage as ChatMessageType,
+  Category,
+  FAQ,
+} from '../../types/chatbot';
+import { generateId, scrollToBottom } from '../../utils/helpers';
 
 interface ChatContainerProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const MAX_MESSAGES = 10;
+const DEFAULT_MAX_MESSAGES = 10;
 
-const ChatContainer: React.FC<ChatContainerProps> = ({ isOpen, onClose }) => {
-  // ✅ Initialize messages with welcome messages directly
-  const [messages, setMessages] = useState<ChatMessageType[]>(() => [
-    {
-      id: generateId(),
-      content: "Hi! 👋 I'm your FAQ Assistant. Choose a category below or ask me anything.",
-      isUser: false,
-      timestamp: new Date(),
-    },
-    {
-      id: generateId(),
-      content:
-        "💡 <strong>Tip:</strong> I can answer FAQ questions AND search the database!<br>Try: \"Find chemicals containing benzene\" or \"How many PFAS compounds?\"",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+// ─── Welcome messages (one source of truth) ───
+const buildWelcomeMessages = (): ChatMessageType[] => [
+  {
+    id: generateId(),
+    isUser: false,
+    timestamp: new Date(),
+    content:
+      "Hi 👋 I'm the **NORMAN Assistant**. Pick a category below or just ask me anything.",
+  },
+  {
+    id: generateId(),
+    isUser: false,
+    timestamp: new Date(),
+    content:
+      "💡 I can answer FAQs **and** query the database. Try: `Find chemicals containing benzene` or `How many PFAS compounds?`",
+  },
+];
 
-  const [inputValue, setInputValue] = useState('');
+// ─── Limit card HTML (pre-rendered, marked as trusted) ───
+const buildLimitMessage = (used: number, max: number): ChatMessageType => ({
+  id: generateId(),
+  isUser: false,
+  timestamp: new Date(),
+  metadata: { isLimitMessage: true },
+  content: `
+    <div style="position:relative;overflow:hidden;max-width:460px;border-radius:14px;border:1px solid #f6dba1;background:linear-gradient(135deg,#fffaf0 0%,#fff7e6 100%);padding:16px 18px;">
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#c98a2b,transparent);background-size:200% 100%;animation:shimmer 2.4s linear infinite;"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:rgba(201,138,43,0.12);border:1px solid rgba(201,138,43,0.25);display:flex;align-items:center;justify-content:center;color:#c98a2b;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 22h14"/><path d="M5 2h14"/>
+            <path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/>
+            <path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>
+          </svg>
+        </div>
+        <div>
+          <h4 style="font-size:14px;font-weight:600;color:#6e4a0e;letter-spacing:-0.01em;margin:0;">Session complete</h4>
+          <div style="font-size:11.5px;color:#9b6b18;margin-top:2px;font-weight:500;">${used} of ${max} questions used</div>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#5a3f12;line-height:1.5;margin:0;">You've reached the message limit for this session. Start a fresh chat to continue exploring.</p>
+    </div>
+  `,
+});
+
+const ChatContainer: FC<ChatContainerProps> = ({ isOpen, onClose }) => {
+  // ── State ────────────────────────────────────────────────────
+  const [messages, setMessages] = useState<ChatMessageType[]>(buildWelcomeMessages);
+  const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [currentTier, setCurrentTier] = useState<number | undefined>(undefined);
+  const [currentTier, setCurrentTier] = useState<number | undefined>();
   const [isProcessing, setIsProcessing] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  const [maxMessages, setMaxMessages] = useState<number>(DEFAULT_MAX_MESSAGES);
   const [limitReached, setLimitReached] = useState(false);
-
-  // ✅ NEW: maximize state
   const [isMaximized, setIsMaximized] = useState(false);
 
-  // Categories & FAQs
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [faqData, setFaqData] = useState<Record<string, FAQ[]>>({});
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Notification
   const [notification, setNotification] = useState<{
     message: string;
     type: 'success' | 'error' | 'info';
   } | null>(null);
 
-  // Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // ============================================================
-  // FUNCTIONS
-  // ============================================================
+  // ── Helpers ──────────────────────────────────────────────────
+  const notify = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' = 'info') =>
+      setNotification({ message, type }),
+    [],
+  );
 
-  const loadCategories = async () => {
-    try {
-      const data = await chatbotAPI.getCategories();
-      setCategories(data.categories);
-      setFaqData(data.faq_data);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    }
-  };
-
-  const checkSessionLimit = async () => {
-    try {
-      const data = await chatbotAPI.checkLimit();
-      setMessageCount(data.user_messages);
-      if (data.limit_reached) {
-        setLimitReached(true);
-      }
-    } catch (error) {
-      console.error('Error checking limit:', error);
-    }
-  };
-
-const showLimitReachedMessage = () => {
-  const limitMessage: ChatMessageType = {
-    id: generateId(),
-    content: `
-      <div style="
-        position: relative;
-        overflow: hidden;
-        max-width: 460px;
-        border-radius: 16px;
-        border: 1px solid rgba(252, 211, 77, 0.5);
-        background: linear-gradient(135deg, #fffbeb 0%, #ffffff 55%, #fff7ed 100%);
-        padding: 18px 20px;
-        box-shadow: 0 4px 14px rgba(251, 191, 36, 0.12), 0 1px 3px rgba(0,0,0,0.04);
-      ">
-        <!-- Animated top accent bar -->
-        <div style="
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 3px;
-          background: linear-gradient(90deg, #fbbf24 0%, #f97316 50%, #fbbf24 100%);
-          background-size: 200% 100%;
-          animation: limitShimmer 2.5s linear infinite;
-        "></div>
-
-        <!-- Header row -->
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
-          <!-- Icon container with hourglass SVG -->
-          <div style="
-            flex-shrink: 0;
-            width: 42px;
-            height: 42px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #fef3c7, #fed7aa);
-            border: 1px solid #fde68a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: limitIconPulse 2.5s ease-in-out infinite;
-          ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 22h14"/>
-              <path d="M5 2h14"/>
-              <path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/>
-              <path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>
-            </svg>
-          </div>
-
-          <div style="min-width: 0;">
-            <h3 style="font-size: 14px; font-weight: 700; color: #78350f; margin: 0; line-height: 1.2; letter-spacing: -0.01em;">
-              Session Complete
-            </h3>
-            <p style="font-size: 11px; color: #b45309; margin: 3px 0 0; font-weight: 500; letter-spacing: 0.02em;">
-              <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; margin-right: 5px; vertical-align: middle;"></span>
-              10 of 10 questions used
-            </p>
-          </div>
-        </div>
-
-        <!-- Body text -->
-        <p style="font-size: 13px; color: #44403c; margin: 0; line-height: 1.55;">
-          You've completed your conversation with the Chatbot. Start a fresh chat below to continue exploring.
-        </p>
-      </div>
-    `,
-    isUser: false,
-    timestamp: new Date(),
-  };
-  setMessages((prev) => [...prev, limitMessage]);
-  setIsTyping(false);
-};
-
-  const handleResetChat = async () => {
-    try {
-      await chatbotAPI.resetChat();
-
-      setMessages([
-        {
-          id: generateId(),
-          content: "Hi! 👋 I'm your FAQ Assistant. Choose a category below or ask me anything.",
-          isUser: false,
-          timestamp: new Date(),
-        },
-        {
-          id: generateId(),
-          content:
-            "💡 <strong>Tip:</strong> I can answer FAQ questions AND search the database!<br>Try: \"Find chemicals containing benzene\" or \"How many PFAS compounds?\"",
-          isUser: false,
-          timestamp: new Date(),
-        },
-      ]);
-
-      setMessageCount(0);
-      setLimitReached(false);
-      showNotification('New chat started successfully!', 'success');
-    } catch (error) {
-      console.error('Error resetting chat:', error);
-      showNotification('Failed to reset chat', 'error');
-    }
-  };
-
-  const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
-    setNotification({ message, type });
-  };
-
-  const handleSendMessage = async (messageText?: string, skipTier: number = 0, isFaqButton: boolean = false) => {
-    const text = messageText || inputValue.trim();
-
-    if (!text || isProcessing) return;
-
-    if (text.length > 1000) {
-      showNotification('Message too long (max 1000 characters)', 'error');
-      return;
-    }
-
-    if (limitReached) {
-      showLimitReachedMessage();
-      return;
-    }
-
-    setIsProcessing(true);
-    setInputValue('');
-
-    const userMessage: ChatMessageType = {
-      id: generateId(),
-      content: text,
-      isUser: true,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-
-    setIsTyping(true);
-    setCurrentTier(skipTier + 1);
-
-    try {
-      const response = await chatbotAPI.sendMessage({
-        message: text,
-        skip_tier: skipTier,
-        is_faq_button: isFaqButton,
-      });
-
+  const showLimitReached = useCallback(
+    (used: number = maxMessages, max: number = maxMessages) => {
+      setMessages((prev) => [...prev, buildLimitMessage(used, max)]);
       setIsTyping(false);
-      setMessageCount((prev) => prev + 1);
+    },
+    [maxMessages],
+  );
 
-      if (messageCount + 1 >= MAX_MESSAGES) {
-        setLimitReached(true);
-        showLimitReachedMessage();
+  // ── Initial load: categories + session limit info ─────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [cats, limit] = await Promise.allSettled([
+          chatbotAPI.getCategories(),
+          chatbotAPI.checkLimit(),
+        ]);
+
+        if (cancelled) return;
+
+        if (cats.status === 'fulfilled') {
+          setCategories(cats.value.categories);
+          setFaqData(cats.value.faq_data);
+        }
+
+        if (limit.status === 'fulfilled') {
+          setMessageCount(limit.value.user_messages);
+          if (typeof limit.value.max_messages === 'number') {
+            setMaxMessages(limit.value.max_messages);
+          }
+          if (limit.value.limit_reached) {
+            setLimitReached(true);
+          }
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[chatbot] init failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ── Auto-scroll to bottom (scrollTop on container — NOT scrollIntoView) ──
+  useEffect(() => {
+    scrollToBottom(scrollerRef.current);
+  }, [messages, isTyping]);
+
+  // ── Lock host page scroll when maximized ─────────────────────
+  useEffect(() => {
+    if (!isMaximized || !isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isMaximized, isOpen]);
+
+  // ── Esc to exit fullscreen ───────────────────────────────────
+  useEffect(() => {
+    if (!isMaximized) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMaximized(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMaximized]);
+
+  // ── Send message ─────────────────────────────────────────────
+  const handleSend = useCallback(
+    async (messageText?: string, skipTier = 0, isFaqButton = false) => {
+      const text = (messageText ?? input).trim();
+      if (!text || isProcessing) return;
+
+      if (text.length > 1000) {
+        notify('Message too long (max 1000 characters)', 'error');
         return;
       }
 
-      const botMessage: ChatMessageType = {
-        id: generateId(),
-        content: response.response,
-        isUser: false,
-        timestamp: new Date(),
-        metadata: {
-          tier: response.tier,
-          tier_name: response.tier_name,
-          type: response.type,
-          similarity: response.similarity,
-          sources: response.sources,
-          can_retry: response.can_retry,
-          next_tier: response.next_tier,
-          timing: response.timing,
-          cost: response.cost,
-          tier_attempts: response.tier_attempts,
-        },
-      };
-      setMessages((prev) => [...prev, botMessage]);
+      if (limitReached) {
+        showLimitReached(messageCount, maxMessages);
+        return;
+      }
 
-    } catch (error: unknown) {
-      setIsTyping(false);
+      setIsProcessing(true);
+      setInput('');
 
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { status?: number } };
-        if (axiosError.response?.status === 429) {
+      setMessages((prev) => [
+        ...prev,
+        { id: generateId(), isUser: true, timestamp: new Date(), content: text },
+      ]);
+
+      setIsTyping(true);
+      setCurrentTier(skipTier + 1);
+
+      try {
+        const res = await chatbotAPI.sendMessage({
+          message: text,
+          skip_tier: skipTier,
+          is_faq_button: isFaqButton,
+        });
+
+        setIsTyping(false);
+        const nextCount = messageCount + 1;
+        setMessageCount(nextCount);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            isUser: false,
+            timestamp: new Date(),
+            content: res.response,
+            metadata: {
+              tier: res.tier,
+              tier_name: res.tier_name,
+              type: res.type,
+              similarity: res.similarity,
+              sources: res.sources,
+              can_retry: res.can_retry,
+              next_tier: res.next_tier,
+              timing: res.timing,
+              cost: res.cost,
+              tier_attempts: res.tier_attempts,
+            },
+          },
+        ]);
+
+        if (nextCount >= maxMessages) {
           setLimitReached(true);
-          showLimitReachedMessage();
+          showLimitReached(nextCount, maxMessages);
+        }
+      } catch (err: unknown) {
+        setIsTyping(false);
+
+        // Backend returned 429 — session limit hit server-side.
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          const data = err.response.data as { user_messages?: number; max_messages?: number } | undefined;
+          setLimitReached(true);
+          showLimitReached(data?.user_messages ?? messageCount, data?.max_messages ?? maxMessages);
           return;
         }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            isUser: false,
+            timestamp: new Date(),
+            content: "Sorry, I ran into a problem. Please try again in a moment.",
+            metadata: { tier: 0, tier_name: 'Error' },
+          },
+        ]);
+        notify('Failed to send message', 'error');
+      } finally {
+        setIsProcessing(false);
       }
+    },
+    [input, isProcessing, limitReached, messageCount, maxMessages, notify, showLimitReached],
+  );
 
-      const errorMessage: ChatMessageType = {
-        id: generateId(),
-        content: 'Sorry, I encountered an error. Please try again.',
-        isUser: false,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+  // ── Feedback handler ─────────────────────────────────────────
+  const handleFeedback = useCallback(
+    async (messageId: string, helpful: boolean) => {
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg?.metadata) return;
 
-      showNotification('Failed to send message', 'error');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+      try {
+        await chatbotAPI.submitFeedback({
+          helpful,
+          tier: msg.metadata.tier ?? 0,
+          tier_name: msg.metadata.tier_name ?? '',
+          type: msg.metadata.type ?? '',
+        });
 
-  const handleFeedback = async (messageId: string, helpful: boolean) => {
-    const message = messages.find((m) => m.id === messageId);
-    if (!message || !message.metadata) return;
-
-    try {
-      await chatbotAPI.submitFeedback({
-        helpful,
-        tier: message.metadata.tier || 0,
-        tier_name: message.metadata.tier_name || '',
-        type: message.metadata.type || '',
-      });
-
-      if (!helpful && message.metadata.can_retry) {
-        const lastUserMessage = messages
-          .slice()
-          .reverse()
-          .find((m) => m.isUser);
-
-        if (lastUserMessage) {
-          handleSendMessage(lastUserMessage.content, message.metadata.tier || 0, false);
+        // If the user said "not helpful" AND the backend allowed retry,
+        // re-send the last user question while skipping the current tier.
+        if (!helpful && msg.metadata.can_retry) {
+          const lastUser = [...messages].reverse().find((m) => m.isUser);
+          if (lastUser) {
+            handleSend(lastUser.content, msg.metadata.tier ?? 0, false);
+          }
         }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[chatbot] feedback failed', err);
       }
-    } catch (error) {
-      console.error('Error submitting feedback:', error);
+    },
+    [messages, handleSend],
+  );
+
+  // ── Reset chat ────────────────────────────────────────────────
+  const handleReset = useCallback(async () => {
+    try {
+      await chatbotAPI.resetChat();
+      setMessages(buildWelcomeMessages());
+      setMessageCount(0);
+      setLimitReached(false);
+      setSelectedCategory(null);
+      notify('New chat started', 'success');
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[chatbot] reset failed', err);
+      notify('Failed to reset chat', 'error');
     }
-  };
-
-  const handleCategoryClick = (categoryName: string) => {
-    setSelectedCategory(categoryName);
-  };
-
-  const handleQuestionClick = (question: string) => {
-    handleSendMessage(question, 0, true);
-    setSelectedCategory(null);
-  };
-
-  const handleBackToCategories = () => {
-    setSelectedCategory(null);
-  };
-
-  // ✅ NEW: maximize toggle
-  const handleToggleMaximize = () => {
-    setIsMaximized((prev) => !prev);
-  };
-
-  // ============================================================
-  // EFFECTS
-  // ============================================================
-
-  useEffect(() => {
-    const init = async () => {
-      await loadCategories();
-      await checkSessionLimit();
-    };
-    init();
-  }, []);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isTyping]);
-
-  // ✅ NEW: Lock host page scroll when maximized
-  useEffect(() => {
-    if (isMaximized && isOpen) {
-      const prevOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = prevOverflow;
-      };
-    }
-  }, [isMaximized, isOpen]);
-
-  // ✅ NEW: ESC key exits maximized mode
-  useEffect(() => {
-    if (!isMaximized) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsMaximized(false);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isMaximized]);
-
-  // ============================================================
-  // RENDER
-  // ============================================================
-
-  const currentQuestions = selectedCategory ? faqData[selectedCategory] || [] : [];
+  }, [notify]);
 
   if (!isOpen) return null;
 
-  // ✅ NEW: dynamic container classes based on maximize state
-  const containerClasses = isMaximized
-    ? 'fixed inset-0 w-full h-full bg-white flex flex-col overflow-hidden z-[9999] animate-slide-up rounded-none border-none'
-    : `fixed bg-white flex flex-col overflow-hidden z-[9999] animate-slide-up
-       md:bottom-4 md:right-6 md:top-4 md:w-[420px] md:max-h-[calc(100vh-32px)] md:rounded-[20px] md:border-2 md:border-sage-200 md:shadow-[0_8px_24px_rgba(107,158,120,0.2)]
-       max-md:inset-0 max-md:w-full max-md:h-full max-md:rounded-none max-md:border-none`;
+  const currentQuestions = selectedCategory ? faqData[selectedCategory] ?? [] : [];
+  const remaining = maxMessages - messageCount;
 
-  // ✅ NEW: center inner content with max-width when maximized (looks better on wide screens)
-  const innerWidthClass = isMaximized ? 'max-w-4xl mx-auto w-full' : '';
+  // Single positioning scheme for both compact and maximized so the resize
+  // is an actual CSS transition (animating width/height) rather than a hard
+  // swap between two different layouts. Content fills the full panel width
+  // in both states; individual bubbles cap their own max-width so they stay
+  // readable when the panel is huge.
+  const containerBase =
+    'fixed z-[9999] flex flex-col overflow-hidden bg-white border border-sage-100 ' +
+    'shadow-[0_18px_40px_rgba(20,40,30,0.14)] rounded-[22px] ' +
+    'bottom-6 right-6 ' +
+    'transition-[width,height,right,bottom,border-radius] duration-[620ms] ease-[cubic-bezier(0.22,1,0.36,1)] ' +
+    'motion-reduce:transition-none ' +
+    'max-md:inset-0 max-md:w-full max-md:h-full max-md:rounded-none max-md:border-none max-md:transition-none ' +
+    'animate-panel-in';
+
+  const containerSize = isMaximized
+    ? 'w-[calc(100vw-48px)] h-[calc(100vh-48px)]'
+    : 'w-[420px] h-[min(720px,calc(100vh-48px))]';
+
+  const containerClasses = `${containerBase} ${containerSize}`;
 
   return (
     <>
+      {/* Backdrop for fullscreen mode */}
+      {isMaximized && (
+        <div
+          className="fixed inset-0 z-[9997] bg-ink/20 backdrop-blur-[2px] animate-msg-in"
+          onClick={() => setIsMaximized(false)}
+        />
+      )}
+
       <div className={containerClasses}>
         <ChatHeader
           onClose={onClose}
           isMaximized={isMaximized}
-          onToggleMaximize={handleToggleMaximize}
+          onToggleMaximize={() => setIsMaximized((v) => !v)}
         />
 
+        {/* Messages */}
         <div
-  ref={messagesContainerRef}
-  className="flex-1 overflow-y-auto relative"
-  style={{
-    backgroundImage: `
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52' viewBox='0 0 60 52'%3E%3Cpolygon points='30,4 52,16 52,40 30,52 8,40 8,16' fill='none' stroke='%236b9e78' stroke-width='0.6' opacity='0.13'/%3E%3Cpolygon points='30,16 42,22 42,34 30,40 18,34 18,22' fill='none' stroke='%236b9e78' stroke-width='0.4' opacity='0.08'/%3E%3C/svg%3E"),
-      linear-gradient(to bottom, rgb(244, 247, 242) 0%, rgb(252, 253, 251) 50%, white 100%)
-    `,
-  }}
->
-          <div className={`px-4 pb-0 flex flex-col gap-3 mt-2${innerWidthClass}`}>
-            {messages.map((message) => (
+          ref={scrollerRef}
+          className="flex-1 min-h-0 overflow-y-auto px-[18px] py-4"
+          style={{
+            background:
+              'radial-gradient(800px 300px at 100% -10%, rgba(121,166,132,0.06), transparent 70%), linear-gradient(180deg, #fafcfa 0%, #ffffff 100%)',
+          }}
+        >
+          <div className="flex flex-col gap-3.5 w-full">
+            {messages.map((m) => (
               <ChatMessage
-                key={message.id}
-                message={message}
-                showFeedback={!message.isUser && !limitReached}
-                onFeedback={(helpful) => handleFeedback(message.id, helpful)}
+                key={m.id}
+                message={m}
+                showFeedback={!m.isUser && !limitReached && !m.metadata?.isLimitMessage && !!m.metadata?.tier}
+                onFeedback={(helpful) => handleFeedback(m.id, helpful)}
               />
             ))}
-
             <TypingIndicator isVisible={isTyping} tier={currentTier} />
-            <div ref={messagesEndRef} />
           </div>
         </div>
 
-        {messageCount >= MAX_MESSAGES - 2 && messageCount < MAX_MESSAGES && !limitReached && (
-          <div className={`${innerWidthClass} mx-4 my-2 px-3 py-2 bg-yellow-50 border-l-4 border-yellow-500 rounded text-xs text-yellow-800`}>
-            ⚠️ {MAX_MESSAGES - messageCount} messages remaining. Start a new chat soon.
+        {/* Low-on-messages warning */}
+        {!limitReached && remaining <= 2 && remaining > 0 && (
+          <div className="mx-[18px] my-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 border-l-[3px] border-l-amber-500 text-[12px] font-medium text-amber-800">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            {remaining} message{remaining === 1 ? '' : 's'} remaining
           </div>
         )}
 
-          {limitReached && (
-  <div className={`${innerWidthClass} mx-4 my-3`}>
-    <button
-      onClick={handleResetChat}
-      className="
-        group relative w-full overflow-hidden
-        bg-gradient-to-r from-sage-500 via-sage-400 to-sage-600
-        bg-[length:200%_100%]
-        text-white py-3.5 px-6 rounded-xl font-semibold text-[14px]
-        shadow-[0_8px_24px_rgba(107,158,120,0.4)]
-        transition-all duration-300 ease-out
-        hover:shadow-[0_14px_32px_rgba(107,158,120,0.55)]
-        hover:-translate-y-0.5
-        active:translate-y-0 active:scale-[0.98] active:duration-100
-        flex items-center justify-center gap-3
-      "
-      style={{ animation: 'newChatGradientFlow 4s ease-in-out infinite' }}
-    >
-      {/* Subtle inner highlight at top */}
-      <span
-        className="absolute inset-x-0 top-0 h-px pointer-events-none"
-        style={{
-          background:
-            'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)',
-        }}
-      />
+        {/* "Start a new chat" button when limit hit */}
+        {limitReached && (
+          <button
+            onClick={handleReset}
+            className="group mx-[18px] my-3 flex items-center justify-center gap-2.5 px-5 py-3 rounded-[14px] text-white font-semibold text-[14px] shadow-glow-sage transition hover:-translate-y-0.5 active:translate-y-0"
+            style={{ background: 'linear-gradient(135deg, #588968 0%, #426c52 100%)' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-500 ease-out group-hover:-rotate-180">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg>
+            Start a new chat
+          </button>
+        )}
 
-      {/* Refresh icon — rotates 180° on hover */}
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="relative z-10 transition-transform duration-500 ease-out group-hover:rotate-180"
-      >
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-        <path d="M16 16h5v5" />
-      </svg>
-
-      <span className="relative z-10 tracking-wide">Start New Chat</span>
-
-      {/* Sparkle — twinkles continuously */}
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="relative z-10 text-yellow-200 drop-shadow"
-        style={{ animation: 'newChatSparkle 2s ease-in-out infinite' }}
-      >
-        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" />
-      </svg>
-    </button>
-  </div>
-)}
-        <div className={innerWidthClass}>
+        {/* Quick actions + input — span the full panel width in both states */}
+        {!limitReached && (
           <QuickActions
             categories={categories}
             selectedCategory={selectedCategory}
             questions={currentQuestions}
-            onCategoryClick={handleCategoryClick}
-            onQuestionClick={handleQuestionClick}
-            onBack={handleBackToCategories}
+            onCategoryClick={setSelectedCategory}
+            onQuestionClick={(q) => {
+              handleSend(q, 0, true);
+              setSelectedCategory(null);
+            }}
+            onBack={() => setSelectedCategory(null)}
           />
+        )}
 
-          <ChatInput
-            value={inputValue}
-            onChange={setInputValue}
-            onSend={() => handleSendMessage()}
-            disabled={isProcessing || limitReached}
-            placeholder={limitReached ? 'Session limit reached' : 'Ask me anything...'}
-          />
-        </div>
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSend={() => handleSend()}
+          disabled={isProcessing || limitReached}
+          placeholder={limitReached ? 'Session limit reached' : 'Ask about compounds, PFAS, methods…'}
+        />
       </div>
 
       {notification && (

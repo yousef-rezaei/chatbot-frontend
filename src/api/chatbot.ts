@@ -1,36 +1,45 @@
-/**
- * API client for chatbot backend
- */
-import axios from 'axios';
-import type { AxiosInstance } from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import type {
   ChatRequest,
   ChatResponse,
-  Category,
-  FAQ,
+  CategoriesResponse,
+  LimitInfo,
 } from '../types/chatbot';
+import { getCsrfToken } from '../utils/helpers';
 
-// ✅ Fixed: Remove import.meta completely
-const getApiBaseUrl = (): string => {
-  // If running as widget, get URL from script tag
+/**
+ * Resolve the API base URL.
+ *
+ * Priority:
+ *   1. VITE_API_URL at build time (standalone dev / preview).
+ *   2. Origin of the embedded widget script (production embed).
+ *   3. Same origin as the host page (last-resort fallback).
+ */
+const resolveApiBaseUrl = (): string => {
+  // 1. Build-time env (only set when bundled via vite.config.ts).
+  const envUrl = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_URL;
+  if (envUrl) return envUrl.replace(/\/$/, '');
+
+  // 2. Widget script tag lookup.
   if (typeof document !== 'undefined') {
-    const scriptTag = document.querySelector('script[src*="chatbot/widget.js"]');
-    if (scriptTag) {
-      const src = scriptTag.getAttribute('src') || '';
+    const tag = document.querySelector<HTMLScriptElement>(
+      'script[src*="norman-chatbot"]',
+    );
+    if (tag?.src) {
       try {
-        const url = new URL(src, window.location.href);
+        const url = new URL(tag.src, window.location.href);
         return `${url.protocol}//${url.host}`;
-      } catch (e) {
-        console.warn('Failed to parse widget URL:', e);
+      } catch {
+        /* fall through */
       }
     }
   }
-  
-  // Fallback to localhost
-  return 'http://localhost:8000';
+
+  // 3. Same-origin fallback.
+  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = resolveApiBaseUrl();
 
 class ChatbotAPI {
   private client: AxiosInstance;
@@ -39,70 +48,53 @@ class ChatbotAPI {
     this.client = axios.create({
       baseURL: API_BASE_URL,
       withCredentials: true,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30_000,
     });
 
     this.client.interceptors.request.use((config) => {
-      const csrfToken = this.getCookie('csrftoken');
-      if (csrfToken) {
-        config.headers['X-CSRFToken'] = csrfToken;
-      }
+      const csrf = getCsrfToken();
+      if (csrf) config.headers['X-CSRFToken'] = csrf;
       return config;
     });
   }
 
-  private getCookie(name: string): string | null {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) {
-      return parts.pop()?.split(';').shift() || null;
-    }
-    return null;
-  }
-
   async sendMessage(request: ChatRequest): Promise<ChatResponse> {
-    const response = await this.client.post<ChatResponse>(
+    const { data } = await this.client.post<ChatResponse>(
       '/api/chatbot/message/',
-      request
+      request,
     );
-    return response.data;
+    return data;
   }
 
-  async getCategories(): Promise<{ 
-    categories: Category[]; 
-    faq_data: Record<string, FAQ[]>;
-  }> {
-    const response = await this.client.get('/api/chatbot/message/', {
-      params: { action: 'get_categories' },
-    });
-    return response.data;
+  async getCategories(): Promise<CategoriesResponse> {
+    const { data } = await this.client.get<CategoriesResponse>(
+      '/api/chatbot/message/',
+      { params: { action: 'get_categories' } },
+    );
+    return data;
   }
 
-  async checkLimit(): Promise<{
-    user_messages: number;
-    max_messages: number;
-    limit_reached: boolean;
-  }> {
-    const response = await this.client.get('/api/chatbot/message/', {
-      params: { action: 'check_limit' },
-    });
-    return response.data;
+  async checkLimit(): Promise<LimitInfo> {
+    const { data } = await this.client.get<LimitInfo>(
+      '/api/chatbot/message/',
+      { params: { action: 'check_limit' } },
+    );
+    return data;
   }
 
   async resetChat(): Promise<{ message: string; user_message_count: number }> {
-    const response = await this.client.post('/api/chatbot/reset/');
-    return response.data;
+    const { data } = await this.client.post('/api/chatbot/reset/');
+    return data;
   }
 
-  async submitFeedback(feedback: {
+  async submitFeedback(payload: {
     helpful: boolean;
     tier: number;
     tier_name: string;
     type: string;
   }): Promise<void> {
-    await this.client.post('/api/chatbot/feedback/', feedback);
+    await this.client.post('/api/chatbot/feedback/', payload);
   }
 }
 

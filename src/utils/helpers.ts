@@ -1,75 +1,63 @@
-/**
- * Helper utility functions
- */
+// ──────────────────────────────────────────────────────────────
+// Shared helpers. Keep this file dependency-free.
+// ──────────────────────────────────────────────────────────────
 
-/**
- * Format timestamp to readable time
- */
-export const formatTime = (date: Date): string => {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
+export const formatTime = (date: Date): string =>
+  date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-/**
- * Format relative time (e.g., "2 minutes ago")
- */
 export const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
   return date.toLocaleDateString();
 };
 
-/**
- * Generate unique ID
- */
-export const generateId = (): string => {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
+export const generateId = (): string =>
+  `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-/**
- * Parse markdown-style formatting
- */
-export const parseMarkdown = (text: string): string => {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-    .replace(/\n/g, '<br>') // Line breaks
-    .replace(/• /g, '• ') // Bullets
-    // Markdown links [text](url)
+// Light markdown → HTML. Order matters: escape first to prevent XSS,
+// then apply transforms. Used only on bot-authored text from the backend.
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+export const parseMarkdown = (text: string, { trustHtml = false } = {}): string => {
+  // If the backend already returned HTML (e.g. the limit card), trust it.
+  // Otherwise escape input first, then apply the inline transforms below.
+  const base = trustHtml ? text : escapeHtml(text);
+  return base
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
     .replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
     )
-    // Plain URLs
     .replace(
       /(^|[^">=])(https?:\/\/[^\s<>"]+)/gi,
-      '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>'
+      '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>',
     );
 };
 
-/**
- * Scroll to element smoothly
- */
-export const scrollToElement = (element: HTMLElement | null, behavior: ScrollBehavior = 'smooth') => {
-  if (element) {
-    element.scrollIntoView({ behavior, block: 'start' });
-  }
+export const getCsrfToken = (): string | null => {
+  const parts = `; ${document.cookie}`.split(`; csrftoken=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
 };
 
 /**
- * Get CSRF token from cookies
+ * Scroll a container to its bottom. Uses scrollTop instead of
+ * scrollIntoView() — that method can hijack the host page's scroll
+ * when the chatbot is embedded.
  */
-export const getCsrfToken = (): string | null => {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; csrftoken=`);
-  if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() || null;
-  }
-  return null;
+export const scrollToBottom = (
+  el: HTMLElement | null,
+  behavior: ScrollBehavior = 'smooth',
+): void => {
+  if (!el) return;
+  el.scrollTo({ top: el.scrollHeight, behavior });
 };

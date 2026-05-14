@@ -1,19 +1,16 @@
-import  { useState } from 'react';
+import { useState } from 'react';
 import ChatButton from './components/Chat/ChatButton';
 import ChatContainer from './components/Chat/ChatContainer';
 
-function App() {
-  const [isChatOpen, setIsChatOpen] = useState(false);
+export default function App() {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sage-50 via-sage-100 to-sage-200">
- 
-
-      {/* Chatbot */}
-      <ChatButton isOpen={isChatOpen} onClick={() => setIsChatOpen(!isChatOpen)} />
-      <ChatContainer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+    <div className="min-h-screen">
+      {/* The host page chrome lives here in standalone dev mode.
+          In widget mode, only ChatButton + ChatContainer mount on the host. */}
+      <ChatButton isOpen={isOpen} onClick={() => setIsOpen(true)} />
+      <ChatContainer isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </div>
   );
 }
-
-export default App;

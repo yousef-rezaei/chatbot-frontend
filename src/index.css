@@ -2,52 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --primary-green: #6b9e78;
-  --primary-light: #7db88e;
-  --primary-lighter: #a8c5a8;
-  --primary-dark: #4a7c59;
-  --accent-green: #7fb48a;
-  --accent-sage: #a8c5a8;
-  --bg-sage: #e8f4ea;
-  --bg-white: #ffffff;
-  --bg-light: #f5f9f6;
-  --text-primary: #2d3e2d;
-  --text-secondary: #5a6b5a;
-  --text-muted: #8a9a8a;
-  --border-light: #d4e4d4;
-  --border-medium: #c0d6c0;
+/* ──────────────────────────────────────────────────────────────
+   Global keyframes used by inline animation styles + utilities.
+   Tailwind only emits keyframes for utilities it sees in source,
+   so we declare the recurring ones here once for safety.
+   ────────────────────────────────────────────────────────────── */
+@keyframes fab-ring {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0;    }
+}
+@keyframes dot-ping {
+  0%   { transform: scale(1);   opacity: 0.55; }
+  100% { transform: scale(2.2); opacity: 0;    }
+}
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0)    scale(1);    opacity: 0.6; }
+  30%           { transform: translateY(-5px) scale(1.15); opacity: 1;   }
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root, #norman-chatbot-root { height: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  color: #14281e;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(121, 166, 132, 0.18), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(163, 196, 168, 0.22), transparent 60%),
+    linear-gradient(180deg, #f3f7f3 0%, #e9f1eb 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #e8f4ea 0%, #c5e1ca 50%, #a8c5a8 100%);
-  min-height: 100vh;
 }
 
-/* Custom scrollbar — can't be expressed in Tailwind config */
-::-webkit-scrollbar { width: 6px; height: 5px; }
-::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
-::-webkit-scrollbar-thumb { background: rgba(107, 158, 120, 0.3); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(107, 158, 120, 0.5); }
+/* Scrollbar (Chromium) */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: #c9ddcc; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #a3c4a8; }
 
-/* Anchor styling inside message bubbles (HTML injected via dangerouslySetInnerHTML) */
+/* Inline-markdown anchors inside bot bubbles */
 .message-bubble a {
-  color: #2196f3;
+  color: #3367d6;
   text-decoration: none;
-  border-bottom: 1px solid #2196f3;
-  transition: all 0.2s;
+  border-bottom: 1px solid rgba(51, 103, 214, 0.35);
+  transition: border-color 150ms;
 }
-.message-bubble a:hover {
-  color: #1976d2;
-  border-bottom-color: #1976d2;
+.message-bubble a:hover { border-bottom-color: #3367d6; }
+
+/* Inline code */
+.message-bubble code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  background: #f3f7f3;
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid #e3eae5;
 }

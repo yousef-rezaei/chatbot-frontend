@@ -1,6 +1,5 @@
-/**
- * TypeScript types for chatbot
- */
+// Wire-format types shared with the Django backend.
+// Mirror these in your backend serializers so they stay in lock-step.
 
 export interface ChatMessage {
   id: string;
@@ -11,13 +10,13 @@ export interface ChatMessage {
 }
 
 export interface ChatMetadata {
-  tier?: number;
+  tier?: number;            // 1=FAQ, 2=RAG, 3=SQL, 4=LLM
   tier_name?: string;
   type?: string;
   similarity?: number;
   sources?: Source[];
   can_retry?: boolean;
-  next_tier?: string | null;  // ✅ Fixed
+  next_tier?: string | null;
   timing?: Timing;
   cost?: Cost;
   tier_attempts?: TierAttempt[];
@@ -86,7 +85,7 @@ export interface ChatResponse {
   confidence?: number;
   sources?: Source[];
   can_retry: boolean;
-  next_tier?: string | null;  // ✅ Fixed
+  next_tier?: string | null;
   tier_attempts?: TierAttempt[];
   timing: Timing;
   cost: Cost;
@@ -99,4 +98,15 @@ export interface SessionLimitResponse {
   user_messages: number;
   max_messages: number;
   action: string;
+}
+
+export interface LimitInfo {
+  user_messages: number;
+  max_messages: number;
+  limit_reached: boolean;
+}
+
+export interface CategoriesResponse {
+  categories: Category[];
+  faq_data: Record<string, FAQ[]>;
 }
